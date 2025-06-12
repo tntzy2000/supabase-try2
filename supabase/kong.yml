@@ -1,0 +1,146 @@
+_format_version: "2.1"
+
+services:
+  - name: api
+    url: http://rest:3000 # PostgREST
+    routes:
+      - name: api-route
+        paths:
+          - /rest/v1/
+        strip_path: true
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - http://localhost:3000 # Your frontend URL
+            - http://127.0.0.1:3000
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - apikey
+            - authorization
+            - content-type
+            - x-client-info
+          exposed_headers:
+            - content-range
+          credentials: true
+          max_age: 3600
+
+  - name: auth
+    url: http://gotrue:9999 # GoTrue
+    routes:
+      - name: auth-route
+        paths:
+          - /auth/v1/
+        strip_path: true
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - http://localhost:3000
+            - http://127.0.0.1:3000
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - apikey
+            - authorization
+            - content-type
+            - x-client-info
+          credentials: true
+          max_age: 3600
+
+  - name: storage
+    url: http://storage:5000 # Storage API
+    routes:
+      - name: storage-route
+        paths:
+          - /storage/v1/
+        strip_path: true
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - http://localhost:3000
+            - http://127.0.0.1:3000
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - apikey
+            - authorization
+            - content-type
+            - x-client-info
+          credentials: true
+          max_age: 3600
+
+  - name: realtime
+    url: http://realtime:4000 # Realtime
+    routes:
+      - name: realtime-route
+        paths:
+          - /realtime/v1/
+        strip_path: true
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - http://localhost:3000
+            - http://127.0.0.1:3000
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - apikey
+            - authorization
+            - content-type
+            - x-client-info
+          credentials: true
+          max_age: 3600
+
+  # Edge Functions are typically routed via a different mechanism by Supabase CLI
+  # but if you needed to proxy them through Kong manually, it would look something like this:
+  # - name: functions
+  #   url: http://functions:8081 # Edge Runtime
+  #   routes:
+  #     - name: functions-route
+  #       paths:
+  #         - /functions/v1/
+  #       strip_path: true
+  #   plugins:
+  #     - name: cors
+  #       config:
+  #         origins:
+  #           - http://localhost:3000
+  #           - http://127.0.0.1:3000
+  #         methods:
+  #           - GET
+  #           - POST
+  #           - PUT
+  #           - PATCH
+  #           - DELETE
+  #           - OPTIONS
+  #         headers:
+  #           - apikey
+  #           - authorization
+  #           - content-type
+  #           - x-client-info
+  #         credentials: true
+  #         max_age: 3600

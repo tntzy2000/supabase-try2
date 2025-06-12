@@ -1,0 +1,172 @@
+version: '3.8'
+
+services:
+  db:
+    image: supabase/postgres:15.1.0.110
+    ports:
+      - "5432:5432" # Changed from 54322:5432 to align with common Supabase local setup and avoid potential conflicts if user has local postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password # Replace with a strong password in a real project
+      POSTGRES_DB: postgres
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Supabase Studio - a web interface for managing your Supabase project
+  studio:
+    image: supabase/studio:latest
+    ports:
+      - "8082:3000" # Changed from 8000:3000 to avoid common conflicts (e.g. with Python's http.server)
+    environment:
+      SUPABASE_URL: http://localhost:8000 # This should point to Kong gateway
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0 # Default anon key
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.M--toBPS7M2cKkAiV_2fSO_2WdZ2c9X5q7Z4yP1K14s # Default service key
+    depends_on:
+      db: 
+        condition: service_healthy
+      kong:
+        condition: service_started # Studio needs Kong to be up to fetch API URL
+    restart: unless-stopped
+
+  # Kong - API Gateway
+  kong:
+    image: supabase/kong:latest
+    ports:
+      - "8000:8000"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: "/var/lib/kong/kong.yml"
+      KONG_DNS_ORDER: "LAST,A,CNAME"
+      KONG_PLUGINS: "request-transformer,cors,key-auth"
+    volumes:
+      - ./kong.yml:/var/lib/kong/kong.yml # Default kong config provided by Supabase CLI
+    depends_on:
+      gotrue:
+        condition: service_healthy
+      rest:
+        condition: service_healthy
+      realtime:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # GoTrue - Auth server
+  gotrue:
+    image: supabase/gotrue:latest
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgresql://postgres:password@db:5432/postgres
+      GOTRUE_SITE_URL: http://localhost:3000 # Your frontend URL
+      GOTRUE_JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      # Add other GoTrue specific env vars here if needed (e.g., for email providers)
+    depends_on:
+      db: 
+        condition: service_healthy
+    restart: unless-stopped
+
+  # PostgREST - RESTful API for your PostgreSQL database
+  rest:
+    image: supabase/postgrest:latest
+    environment:
+      PGRST_DB_URI: postgresql://postgres:password@db:5432/postgres
+      PGRST_DB_SCHEMA: public,storage,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+    depends_on:
+      db: 
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Realtime - Listen to database changes via websockets
+  realtime:
+    image: supabase/realtime:latest
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: password
+      DB_NAME: postgres
+      DB_SSL: "false"
+      PORT: 4000
+      JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
+    depends_on:
+      db: 
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Storage - Manage large files like images and videos
+  storage:
+    image: supabase/storage-api:latest
+    environment:
+      DATABASE_URL: postgresql://postgres:password@db:5432/postgres
+      FILE_SIZE_LIMIT: 52428800 # 50MB
+      GLOBAL_S3_BUCKET: supabase
+      GLOBAL_S3_ENDPOINT: http://localhost:9000 # MinIO endpoint
+      JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
+      POSTGREST_URL: http://rest:3000
+      REGION: local
+      S3_ACCESS_KEY: super-secret-access-key
+      S3_SECRET_KEY: super-secret-secret-key
+      TENANT_ID: stub
+    depends_on:
+      db: 
+        condition: service_healthy
+      rest:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # MinIO - S3 compatible object storage
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: super-secret-access-key
+      MINIO_ROOT_PASSWORD: super-secret-secret-key
+    volumes:
+      - ./minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Edge Functions - Deno-based serverless functions (Placeholder, actual functions deployed via CLI)
+  # The Supabase CLI handles running edge functions locally during development.
+  # This entry is more for completeness if you were to manage it all purely via Docker Compose.
+  # functions:
+  #   image: supabase/edge-runtime
+  #   ports:
+  #     - "54321:8081"
+  #   environment:
+  #     SUPABASE_URL: http://kong:8000
+  #     SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+  #     SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.M--toBPS7M2cKkAiV_2fSO_2WdZ2c9X5q7Z4yP1K14s
+  #     SUPABASE_DB_URL: postgresql://postgres:password@db:5432/postgres
+  #   volumes:
+  #     - ../src/api:/home/deno/functions # Mount your functions directory
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     kong:
+  #       condition: service_started
+  #   restart: unless-stopped
+
+volumes:
+  postgres-data:
+  minio-data:
