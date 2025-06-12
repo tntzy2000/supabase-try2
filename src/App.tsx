@@ -1,29 +1,40 @@
-import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import IndexPage from './pages/index.tsx';
-import TodosPage from './pages/todos.tsx';
-// import { AuthProvider, useAuth } from './contexts/AuthContext'; // To be created
+import IndexPage from './pages/index'; // Updated import path
+import TodosPage from './pages/todos'; // Updated import path
+import { AuthProvider, useAuth } from './contexts/AuthContext'; 
 
-// Placeholder for ProtectedRoute component
-// const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
-//   const { user } = useAuth(); // Assuming useAuth hook from AuthContext
-//   if (!user) {
-//     return <Navigate to="/" replace />;
-//   }
-//   return children;
-// };
+// ProtectedRoute component
+const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
+  const { user, loading } = useAuth(); // Get user and loading state
+
+  if (loading) {
+    return <div>Loading...</div>; // Or a spinner component
+  }
+
+  if (!user) {
+    // If not loading and no user, redirect to login page
+    return <Navigate to="/" replace />;
+  }
+  return children; // User is authenticated, render the children
+};
 
 function App() {
   return (
-    // <AuthProvider>
+    <AuthProvider>
       <div className="min-h-screen bg-gray-100">
         <Routes>
           <Route path="/" element={<IndexPage />} />
-          {/* <Route path="/todos" element={<ProtectedRoute><TodosPage /></ProtectedRoute>} /> */}
-          <Route path="/todos" element={<TodosPage />} /> {/* Temp: no protection */}
+          <Route 
+            path="/todos" 
+            element={
+              <ProtectedRoute>
+                <TodosPage />
+              </ProtectedRoute>
+            } 
+          />
         </Routes>
       </div>
-    // </AuthProvider>
+    </AuthProvider>
   );
 }
 

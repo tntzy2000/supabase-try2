@@ -4,6 +4,8 @@ import { supabaseAdmin, getUserFromRequest } from '../../../src/lib/supabaseClie
 console.log('Todo Edge Function initializing...');
 
 serve(async (req: Request) => {
+  console.log(`Incoming request: ${req.method} ${req.url}`);
+  console.log('Request headers:', JSON.stringify(Object.fromEntries(req.headers.entries())));
   // This is needed if you're planning to invoke your function from a browser.
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*', // Adjust in production!
@@ -24,6 +26,7 @@ serve(async (req: Request) => {
     });
   }
   const userId = userContext.id;
+  console.log('User context resolved. User ID:', userId);
 
   try {
     let data: any = null;
@@ -37,23 +40,29 @@ serve(async (req: Request) => {
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
-      if (listError) throw listError;
+      if (listError) {
+        console.error('Supabase error fetching todos (listError):', JSON.stringify(listError, null, 2));
+        throw listError;
+      }
       data = todos;
       console.log('Todos fetched:', data);
     } else if (req.method === 'POST') {
       console.log(`POST /api/todo (create) for user ${userId}`);
       const body = await req.json();
-      const { title } = body;
-      if (!title) {
-        error = 'Title is required';
+      const { task } = body;
+      if (!task) {
+        error = 'Task is required';
         status = 400;
       } else {
         const { data: newTodo, error: createError } = await supabaseAdmin
           .from('Todo')
-          .insert([{ title, user_id: userId }])
+          .insert([{ task, user_id: userId }])
           .select()
           .single();
-        if (createError) throw createError;
+        if (createError) {
+          console.error('Supabase error creating todo (createError):', JSON.stringify(createError, null, 2));
+          throw createError;
+        }
         data = newTodo;
         status = 201;
         console.log('Todo created:', data);
@@ -61,19 +70,22 @@ serve(async (req: Request) => {
     } else if (req.method === 'PUT') {
       console.log(`PUT /api/todo (toggle) for user ${userId}`);
       const body = await req.json();
-      const { id, is_done } = body;
-      if (!id || typeof is_done !== 'boolean') {
-        error = 'Todo ID and is_done (boolean) are required';
+      const { id, is_complete } = body;
+      if (id === undefined || typeof is_complete !== 'boolean') {
+        error = 'Todo ID and is_complete (boolean) are required';
         status = 400;
       } else {
         const { data: updatedTodo, error: toggleError } = await supabaseAdmin
           .from('Todo')
-          .update({ is_done })
+          .update({ is_complete })
           .eq('id', id)
           .eq('user_id', userId)
           .select()
           .single();
-        if (toggleError) throw toggleError;
+        if (toggleError) {
+          console.error('Supabase error toggling todo (toggleError):', JSON.stringify(toggleError, null, 2));
+          throw toggleError;
+        }
         if (!updatedTodo) {
             error = 'Todo not found or not authorized';
             status = 404;
@@ -95,7 +107,10 @@ serve(async (req: Request) => {
           .delete({ count: 'exact' })
           .eq('id', id)
           .eq('user_id', userId);
-        if (deleteError) throw deleteError;
+        if (deleteError) {
+          console.error('Supabase error deleting todo (deleteError):', JSON.stringify(deleteError, null, 2));
+          throw deleteError;
+        }
         if (count === 0) {
             error = 'Todo not found or not authorized to delete';
             status = 404;
@@ -110,14 +125,17 @@ serve(async (req: Request) => {
     }
 
     const responseBody = error ? { error } : (data !== null ? data : {});
+    console.log(`Responding with status: ${status}, body:`, JSON.stringify(responseBody));
     return new Response(JSON.stringify(responseBody), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: status,
     });
 
   } catch (err: any) {
-    console.error('Error in Edge Function:', err);
-    return new Response(JSON.stringify({ error: err.message || 'Internal Server Error' }), {
+    console.error('Detailed Error in Edge Function:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
+    const errorResponse = { error: err.message || 'Internal Server Error' };
+    console.log(`Responding with error status: 500, body:`, JSON.stringify(errorResponse));
+    return new Response(JSON.stringify(errorResponse), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });
