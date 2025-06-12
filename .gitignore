@@ -144,5 +144,6 @@ dist-ssr
 supabase/.env
 input.sh
 .windsurf/workflows/reinstall-nodejs.md
+supabase/migrations/
 supabase/migrations/20250612140000_create_user_and_todo_tables.sql
 supabase/migrations/20250612072455_rename_todo_title_to_task.sql
